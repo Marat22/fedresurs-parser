@@ -15,7 +15,7 @@ from selenium.webdriver.common.action_chains import ActionChains
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
 
 class PageLoader:
-    def __init__(self, headless=False):
+    def __init__(self, headless=True):  # Changed default to headless=True
         self.options = Options()
         if headless:
             self.options.add_argument("--headless=new")
@@ -143,14 +143,14 @@ def initialize_output_file(input_file, output_file, force_recreate=False):
     print(f"Using existing file: {output_file}")
     return False
 
-def process_links_file(input_file, output_file, force_recreate=False):
+def process_links_file(input_file, output_file, force_recreate=False, headless=True):  # Added headless parameter
     """Process all URLs in JSON file and update with extracted links"""
     initialize_output_file(input_file, output_file, force_recreate)
     
     # Read from output file which may already contain processed entries
     with open(output_file, 'r+', encoding='utf-8') as f:
         data = json.load(f)
-        loader = PageLoader(headless=False)
+        loader = PageLoader(headless=headless)  # Pass headless parameter
         
         try:
             for i, entry in enumerate(data):
@@ -181,6 +181,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Process monthly links from Fedresurs')
     parser.add_argument('--force-recreate', action='store_true',
                         help='Recreate output file even if it exists')
+    parser.add_argument('--show', action='store_true',  # Added show flag
+                        help='Show browser during processing (disable headless mode)')
     args = parser.parse_args()
     
-    process_links_file("1month_links.json", "2month_links.json", args.force_recreate)
+    process_links_file(
+        "1month_links.json", 
+        "2month_links.json", 
+        force_recreate=args.force_recreate,
+        headless=not args.show  # Invert show flag to headless parameter
+    )
