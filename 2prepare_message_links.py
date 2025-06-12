@@ -10,6 +10,9 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 import time
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.common.action_chains import ActionChains
+from selenium.common.exceptions import NoSuchElementException, TimeoutException
 
 class PageLoader:
     def __init__(self, headless=False):
@@ -18,6 +21,7 @@ class PageLoader:
             self.options.add_argument("--headless=new")
         self.options.add_argument("--start-maximized")
         self.driver = None
+        self.main_window_handle = None
         
     def start_driver(self):
         if not self.driver:
@@ -31,6 +35,7 @@ class PageLoader:
         self.start_driver()
         self.driver.get(url)
         print(f"\nProcessing URL: {url}")
+        self.main_window_handle = self.driver.current_window_handle
         
         time.sleep(2)  # Initial page load wait
         
@@ -52,11 +57,72 @@ class PageLoader:
         print(f"Total clicks: {click_count}")
         return self.driver
     
-    def save_all_links(self):
-        """Extract and return all relevant links from loaded page"""
-        # DUMMY IMPLEMENTATION - REPLACE WITH ACTUAL LOGIC
-        print("Extracting links...")
-        return ["link1", "link2", "link3"]  # Return dummy links
+    def get_all_links(self):
+        """Extract links by clicking each block and capturing the URL"""
+        print("Extracting links by clicking blocks...")
+        
+        # Find all clickable anchors using the proper selector
+        anchors = self.driver.find_elements(
+            By.CSS_SELECTOR, "div.info-link-container > el-info-link > a.info"
+        )
+        print(f"Found {len(anchors)} links to process")
+        
+        links = []
+        processed_count = 0
+        
+        for anchor in anchors:
+            try:
+                # Save the current window handle
+                original_window = self.driver.current_window_handle
+                
+                # Scroll to the element before interacting
+                self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", anchor)
+                
+                # Open the detail page in a new tab
+                ActionChains(self.driver) \
+                    .key_down(Keys.CONTROL) \
+                    .click(anchor) \
+                    .key_up(Keys.CONTROL) \
+                    .perform()
+                
+                # Wait for the new tab to open
+                WebDriverWait(self.driver, 10).until(
+                    lambda d: len(d.window_handles) > len([original_window])
+                )
+                
+                # Switch to the new tab
+                new_window = [handle for handle in self.driver.window_handles 
+                            if handle != original_window][0]
+                self.driver.switch_to.window(new_window)
+                
+                # Wait for the page to load
+                WebDriverWait(self.driver, 10).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, "body")))
+                time.sleep(0.5)  # Additional stabilization
+                
+                # Capture the URL
+                detail_url = self.driver.current_url
+                if detail_url not in links:  # Prevent duplicates
+                    links.append(detail_url)
+                    processed_count += 1
+                    print(f"Processed {processed_count}/{len(anchors)}: {detail_url}")
+                else:
+                    print(f"Skipped duplicate: {detail_url}")
+                
+                # Close the detail tab
+                self.driver.close()
+                
+                # Switch back to the original window
+                self.driver.switch_to.window(original_window)
+                
+            except Exception as e:
+                print(f"Error processing link: {str(e)}")
+                # Ensure we return to the main window
+                if self.main_window_handle in self.driver.window_handles:
+                    self.driver.switch_to.window(self.main_window_handle)
+        
+        print(f"Successfully processed {processed_count}/{len(anchors)} links")
+        return links
     
     def close(self):
         if self.driver:
@@ -94,7 +160,7 @@ def process_links_file(input_file, output_file, force_recreate=False):
                 
                 print(f"\n{'='*50}\nProcessing month: {entry['month']}\n{'='*50}")
                 loader.load_all_pages(entry['url'])
-                entry["links_inside"] = loader.save_all_links()
+                entry["links_inside"] = loader.get_all_links()
                 
                 # Update JSON file after each processed entry
                 f.seek(0)
