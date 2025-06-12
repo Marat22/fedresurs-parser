@@ -1,3 +1,7 @@
+import json
+import os
+import shutil
+import argparse
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
@@ -28,27 +32,19 @@ class PageLoader:
         self.driver.get(url)
         print(f"\nProcessing URL: {url}")
         
-        # Initial page load wait
-        time.sleep(2)
+        time.sleep(2)  # Initial page load wait
         
         click_count = 0
         while True:
             try:
-                # Wait for button to be clickable
                 button = WebDriverWait(self.driver, 10).until(
-                    EC.element_to_be_clickable((By.CSS_SELECTOR, "div.more_btn_wrapper div.more_btn")))
-                
-                # Scroll to button (some sites require element in viewport)
+                    EC.element_to_be_clickable((By.CSS_SELECTOR, "div.more_btn_wrapper div.more_btn"))
+                )
                 self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", button)
-                
-                # Click using JavaScript to avoid interception issues
                 self.driver.execute_script("arguments[0].click();", button)
                 click_count += 1
                 print(f"Clicked 'Load More' ({click_count} times)")
-                
-                # Wait for content to load - adjust based on network speed
-                time.sleep(2)
-                
+                time.sleep(2)  # Content loading wait
             except Exception as e:
                 print(f"Stopping: {str(e).split('.')[0]}")
                 break
@@ -56,31 +52,69 @@ class PageLoader:
         print(f"Total clicks: {click_count}")
         return self.driver
     
+    def save_all_links(self):
+        """Extract and return all relevant links from loaded page"""
+        # DUMMY IMPLEMENTATION - REPLACE WITH ACTUAL LOGIC
+        print("Extracting links...")
+        return ["link1", "link2", "link3"]  # Return dummy links
+    
     def close(self):
-        """Close browser session"""
         if self.driver:
             self.driver.quit()
             self.driver = None
 
-# Usage example
-if __name__ == "__main__":
-    # Initialize loader (set headless=True for background operation)
-    loader = PageLoader(headless=False)
+def initialize_output_file(input_file, output_file, force_recreate=False):
+    """Create output file if it doesn't exist or force recreate is requested"""
+    if force_recreate and os.path.exists(output_file):
+        print(f"Forcing recreation of {output_file}")
+        os.remove(output_file)
     
-    try:
-        # First URL processing
-        url1 = "https://fedresurs.ru/encumbrances?group=Leasing&period=%7B%22beginJsDate%22%3A%222016-01-01T00%3A00%3A00.000Z%22%2C%22endJsDate%22%3A%222016-01-31T23%3A59%3A59.999Z%22%7D&limit=15&offset=0"
-        driver = loader.load_all_pages(url1)
+    if not os.path.exists(output_file):
+        print(f"Creating {output_file} from {input_file}")
+        shutil.copyfile(input_file, output_file)
+        return True
+    
+    print(f"Using existing file: {output_file}")
+    return False
+
+def process_links_file(input_file, output_file, force_recreate=False):
+    """Process all URLs in JSON file and update with extracted links"""
+    initialize_output_file(input_file, output_file, force_recreate)
+    
+    # Read from output file which may already contain processed entries
+    with open(output_file, 'r+', encoding='utf-8') as f:
+        data = json.load(f)
+        loader = PageLoader(headless=False)
         
-        # Perform additional actions with the loaded page
-        # Example: extract data or take screenshot
-        driver.save_screenshot("page1_fully_loaded.png")
-        
-        # Process another URL using the same session
-        # url2 = "https://another-fedresurs-url.example"
-        # loader.load_all_pages(url2)
-        
-    finally:
-        # Close browser only when completely done
-        # loader.close()
-        pass
+        try:
+            for i, entry in enumerate(data):
+                if "links_inside" in entry and not force_recreate:
+                    print(f"Skipping already processed: {entry['month']}")
+                    continue
+                
+                print(f"\n{'='*50}\nProcessing month: {entry['month']}\n{'='*50}")
+                loader.load_all_pages(entry['url'])
+                entry["links_inside"] = loader.save_all_links()
+                
+                # Update JSON file after each processed entry
+                f.seek(0)
+                json.dump(data, f, indent=2, ensure_ascii=False)
+                f.truncate()
+                print(f"Updated JSON for {entry['month']}")
+                
+                # Close and reopen browser periodically to prevent memory issues
+                if (i + 1) % 5 == 0:
+                    print("Restarting browser to prevent memory leaks")
+                    loader.close()
+        except Exception as e:
+            print(f"Processing failed: {str(e)}")
+        finally:
+            loader.close()
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='Process monthly links from Fedresurs')
+    parser.add_argument('--force-recreate', action='store_true',
+                        help='Recreate output file even if it exists')
+    args = parser.parse_args()
+    
+    process_links_file("1month_links.json", "2month_links.json", args.force_recreate)
