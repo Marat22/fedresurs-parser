@@ -251,6 +251,7 @@ def parse_message_section(driver: webdriver.Chrome) -> Dict[str, Any]:
                     # Get table header to determine the key
                     header_elem = section.find_elements(By.XPATH, ".//div[contains(@class, 'message-text-header')]")
                     table_key = header_elem[0].text.strip() if header_elem else "Таблица"
+                    table_key = table_key[:36]
                     message_data[table_key] = table_data
             
             # Parse nested message components
