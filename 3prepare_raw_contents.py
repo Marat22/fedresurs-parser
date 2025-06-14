@@ -48,14 +48,14 @@ def setup_driver(headless: bool = True) -> webdriver.Chrome:
 
 def parse_contents(driver: webdriver.Chrome, url: str) -> Dict[str, Any]:
     """
-    Parse content from the given URL, extracting Публикатор and Сообщение sections.
-    
+    Parse content from the given URL, extracting Публикатор, Сообщение, and Связанные сообщения sections.
+
     Args:
         driver: Chrome WebDriver instance
         url: URL to parse
-        
+
     Returns:
-        Dictionary with parsed content including 'Публикатор', 'Сообщение', and 'url'
+        Dictionary with parsed content including 'Публикатор', 'Сообщение', and 'Связанные сообщения'
     """
     try:
         driver.get(url)
@@ -67,19 +67,24 @@ def parse_contents(driver: webdriver.Chrome, url: str) -> Dict[str, Any]:
         load_all_messages(driver)
 
         parsed_data = {"url": url}
-        
+
         # Parse Публикатор section
         publisher_data = parse_publisher_section(driver)
         if publisher_data:
             parsed_data["Публикатор"] = publisher_data
-        
+
         # Parse Сообщение section
         message_data = parse_message_section(driver)
         if message_data:
             parsed_data["Сообщение"] = message_data
-        
+
+        # Parse Связанные сообщения section
+        related_messages = parse_related_messages(driver)
+        if related_messages:
+            parsed_data["Связанные сообщения"] = related_messages
+
         return parsed_data
-        
+
     except TimeoutException:
         print(f"Timeout loading page: {url}")
         return {"error": "timeout", "url": url}
@@ -89,7 +94,6 @@ def parse_contents(driver: webdriver.Chrome, url: str) -> Dict[str, Any]:
     except Exception as e:
         print(f"Unexpected error for {url}: {str(e)}")
         return {"error": f"unexpected_error: {str(e)}", "url": url}
-
 
 def load_all_messages(driver: webdriver.Chrome, timeout: int = 30) -> None:
     """
@@ -264,6 +268,59 @@ def parse_message_section(driver: webdriver.Chrome) -> Dict[str, Any]:
         print(f"Error parsing message section: {str(e)}")
     
     return message_data
+
+
+def parse_related_messages(driver):
+    """
+    Parse the 'Связанные сообщения' section from the page.
+
+    Args:
+        driver: Chrome WebDriver instance
+
+    Returns:
+        Dictionary of related messages or empty dict if not found
+    """
+    related_messages = {}
+
+    try:
+        # Find the block with header "Связанные сообщения"
+        header = WebDriverWait(driver, 5).until(
+            EC.presence_of_element_located((By.XPATH, "//div[@class='paragraph-header' and contains(., 'Связанные сообщения')]"))
+        )
+
+        # Get the parent container (the div with class "paragraph")
+        related_block = header.find_element(By.XPATH, "./ancestor::div[@class='paragraph']")
+
+        # Find all .info-item elements inside the block
+        info_items = related_block.find_elements(By.CLASS_NAME, "info-item")
+
+        for item in info_items:
+            # Extract the number and date (e.g., "08980093 от 15.07.2021")
+            try:
+                number_date_element = item.find_element(By.CLASS_NAME, "flex-shrink-0")
+                number_date = number_date_element.text.strip()
+            except:
+                number_date = ""
+
+            # Extract the message title
+            try:
+                title_element = item.find_element(By.TAG_NAME, "a")
+                title = title_element.text.strip()
+            except:
+                try:
+                    title = item.find_element(By.CLASS_NAME, "current-message").text.strip()
+                except:
+                    title = ""
+
+            if number_date and title:
+                related_messages[number_date] = title
+
+    except:
+        # If block is not found, return empty dict
+        pass
+
+    return related_messages
+
 
 def parse_message_table(table_element) -> Dict[str, Any]:
     """
@@ -591,7 +648,7 @@ def main():
         return 0
         
     except KeyboardInterrupt:
-        print("\nProcessing interrupted by user")
+        print("\nProcessing interrdeaupted by user")
         return 1
     except Exception as e:
         print(f"Error during processing: {str(e)}")
@@ -599,4 +656,4 @@ def main():
 
 
 if __name__ == "__main__":
-    exit(main())
+    main()
