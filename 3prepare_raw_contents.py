@@ -17,7 +17,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import StaleElementReferenceException, NoSuchElementException, TimeoutException, WebDriverException
 import time
-from urllib.parse import urlparse
+from typing import Dict, Any, Optional
 def setup_driver(headless: bool = True) -> webdriver.Chrome:
     """
     Setup Chrome WebDriver with appropriate options.
@@ -125,57 +125,91 @@ def load_all_messages(driver: webdriver.Chrome, timeout: int = 30) -> None:
             break
 
 
-def parse_publisher_section(driver: webdriver.Chrome) -> Dict[str, Any]:
+def parse_publisher_section(driver) -> Optional[Dict[str, Any]]:
     """
-    Parse the Публикатор (Publisher) section.
+    Parse the Публикатор section from the page.
     
     Args:
         driver: Chrome WebDriver instance
         
     Returns:
-        Dictionary with publisher information
+        Dictionary with publisher data: {"name": str, "ИНН": int, "ОГРН": int}
+        Returns None if section not found or parsing fails
     """
-    publisher_data = {}
-    
     try:
-        # Find publisher section by header
-        publisher_sections = driver.find_elements(By.XPATH, "//div[contains(@class, 'paragraph-header') and text()='Публикатор']/following-sibling::*")
+        # Find the Публикатор section
+        publisher_section = driver.find_element(
+            By.CSS_SELECTOR, 
+            'information-page-item[header="Публикатор"]'
+        )
         
-        if not publisher_sections:
-            return {}
+        # Extract publisher data from the main element
+        publisher_main = publisher_section.find_element(By.CLASS_NAME, "main")
         
-        # Look for company publisher within publisher section
-        for section in publisher_sections:
-            # Extract company name
-            name_elements = section.find_elements(By.XPATH, ".//div[contains(@class, 'name')]//span")
-            if name_elements:
-                publisher_data["название"] = name_elements[0].text.strip()
+        # Extract company name
+        name = _extract_company_name(publisher_main)
+        
+        # Extract INN and OGRN
+        inn = _extract_id_value(publisher_main, "inn")
+        ogrn = _extract_id_value(publisher_main, "ogrn")
+        
+        # Validate that we have all required data
+        if not all([name, inn, ogrn]):
+            print("Warning: Missing required publisher data")
+            return None
             
-            # Extract IDs (ИНН, ОГРН, etc.)
-            id_items = section.find_elements(By.XPATH, ".//div[contains(@class, 'id-item')]")
-            for item in id_items:
-                # Get the label (ИНН, ОГРН, etc.)
-                label_elem = item.find_elements(By.XPATH, ".//div[contains(@class, 'id-item-name')]")
-                value_elem = item.find_elements(By.XPATH, ".//span")
-                
-                if label_elem and value_elem:
-                    label = label_elem[0].text.strip()
-                    value = value_elem[0].text.strip()
-                    if label and value:
-                        # Convert numeric values to integers if possible
-                        try:
-                            publisher_data[label] = int(value)
-                        except ValueError:
-                            publisher_data[label] = value
-            
-            # If we found data, break (assuming first section has the main publisher info)
-            if publisher_data:
-                break
-                
+        return {
+            "name": name,
+            "ИНН": _safe_int_convert(inn),
+            "ОГРН": _safe_int_convert(ogrn)
+        }
+        
+    except NoSuchElementException as e:
+        print(f"Publisher section not found: {str(e)}")
+        return None
     except Exception as e:
         print(f"Error parsing publisher section: {str(e)}")
+        return None
+
+
+def _extract_company_name(publisher_main) -> Optional[str]:
+    """Extract company name from publisher main element."""
+    try:
+        name_element = publisher_main.find_element(By.CSS_SELECTOR, ".name span")
+        return name_element.text.strip()
+    except NoSuchElementException:
+        print("Company name not found")
+        return None
+
+
+def _extract_id_value(publisher_main, id_type: str) -> Optional[str]:
+    """
+    Extract ID value (INN or OGRN) from publisher main element.
     
-    return publisher_data
+    Args:
+        publisher_main: WebElement of the main publisher section
+        id_type: "inn" or "ogrn"
+    """
+    try:
+        id_element = publisher_main.find_element(
+            By.CSS_SELECTOR, 
+            f'.id-item.{id_type} span'
+        )
+        return id_element.text.strip()
+    except NoSuchElementException:
+        print(f"{id_type.upper()} not found")
+        return None
+
+
+def _safe_int_convert(value: Optional[str]) -> Optional[int]:
+    """Safely convert string to integer."""
+    if not value:
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        print(f"Could not convert '{value}' to integer")
+        return None
 
 def parse_message_section(driver: webdriver.Chrome) -> Dict[str, Any]:
     """
@@ -254,31 +288,31 @@ def parse_message_table(table_element) -> Dict[str, Any]:
                 # Parse the row data
                 row_data = {}
                 
-                # Second cell often contains structured data
+                # Second cell contains structured data with inner items
                 if len(cells) > 1:
-                    # Look for inner items in second cell
+                    # Look for inner items in second cell (Идентификатор, Классификатор)
                     inner_items = cells[1].find_elements(By.XPATH, ".//div[contains(@class, 'td-inner-item')]")
-                    subject_data = {}
                     
                     for inner_item in inner_items:
-                        label_elem = inner_item.find_elements(By.XPATH, ".//div[contains(@class, 'fw-light')]")
-                        value_elem = inner_item.find_elements(By.XPATH, ".//div[not(contains(@class, 'fw-light'))]")
+                        # Get all direct child divs of the inner item
+                        child_divs = inner_item.find_elements(By.XPATH, "./div")
                         
-                        if label_elem and len(value_elem) > 1:  # Skip the label div
-                            label = label_elem[0].text.strip()
-                            value = extract_text_content(value_elem[1])
+                        if len(child_divs) >= 2:
+                            # First div is the label (with fw-light class)
+                            label = child_divs[0].text.strip()
+                            # Second div is the value
+                            value = extract_text_content(child_divs[1])
+
                             if label and value:
-                                subject_data[label] = value
-                    
-                    if subject_data:
-                        row_data["Предмет финансовой аренды (лизинга)"] = subject_data
+                                row_data[label] = value
                 
-                # Third cell is typically description
+                # Third cell is typically description (Описание)
                 if len(cells) > 2:
                     description = cells[2].text.strip()
                     if description:
                         row_data["Описание"] = description
                 
+                # Only add row if we have any data
                 if row_data and row_num:
                     table_data[row_num] = row_data
                     
