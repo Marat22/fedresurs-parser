@@ -15,11 +15,9 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException, WebDriverException
+from selenium.common.exceptions import StaleElementReferenceException, NoSuchElementException, TimeoutException, WebDriverException
 import time
 from urllib.parse import urlparse
-
-
 def setup_driver(headless: bool = True) -> webdriver.Chrome:
     """
     Setup Chrome WebDriver with appropriate options.
@@ -65,7 +63,9 @@ def parse_contents(driver: webdriver.Chrome, url: str) -> Dict[str, Any]:
         WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((By.TAG_NAME, "body"))
         )
-        
+
+        load_all_messages(driver)
+
         parsed_data = {"url": url}
         
         # Parse Публикатор section
@@ -89,6 +89,40 @@ def parse_contents(driver: webdriver.Chrome, url: str) -> Dict[str, Any]:
     except Exception as e:
         print(f"Unexpected error for {url}: {str(e)}")
         return {"error": f"unexpected_error: {str(e)}", "url": url}
+
+
+def load_all_messages(driver: webdriver.Chrome, timeout: int = 30) -> None:
+    """
+    Clicks 'Загрузить ещё' button repeatedly until it no longer appears.
+    
+    Args:
+        driver: Chrome WebDriver instance
+        timeout: Max number of retries before giving up
+    """
+    click_count = 0
+    while click_count < timeout:
+        try:
+            # Wait for the button to become clickable
+            load_more_button = WebDriverWait(driver, 10).until(
+                EC.element_to_be_clickable((By.CLASS_NAME, "more_btn_orange"))
+            )
+            # Scroll the button into view (helps prevent click issues)
+            driver.execute_script("arguments[0].scrollIntoView(true);", load_more_button)
+            time.sleep(0.5)  # Small pause after scrolling
+            # Click the button
+            load_more_button.click()
+            print("Clicked 'Загрузить еще'")
+            click_count += 1
+            time.sleep(2)  # Allow content to load after clicking
+        except (NoSuchElementException, TimeoutException):
+            print("No more 'Загрузить еще' button found")
+            break
+        except StaleElementReferenceException:
+            print("Stale element reference encountered, retrying...")
+            continue
+        except Exception as e:
+            print(f"Unexpected error while loading more messages: {e}")
+            break
 
 
 def parse_publisher_section(driver: webdriver.Chrome) -> Dict[str, Any]:
