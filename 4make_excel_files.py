@@ -27,10 +27,72 @@ OUTPUT_COLUMNS = [
 def parse_columns(record: dict) -> dict:
     """
     Parse the record and return a dictionary with the required columns.
-    This is a placeholder and should be implemented later.
     """
-    return {k: "sample_data" for k in OUTPUT_COLUMNS}
-    raise NotImplementedError("parse_columns function is not implemented yet.")
+    parsed_data = {}
+
+    # Extract 'Ссылка'
+    parsed_data["Ссылка"] = record.get("url", "")
+
+    # Extract 'Сообщение о договоре финансовой аренды'
+    parsed_data["Сообщение о договоре финансовой аренды"] = record.get("Сообщение", {}).get("Договор", "")
+
+    # Extract 'Дата прекращения' and 'Причина прекращения'
+    # This part is more complex and depends on the structure of the data.
+    # For now, we'll leave them as placeholders or empty strings.
+    parsed_data["Дата прекращения"] = record.get("Сообщение", {}).get("Дата прекращения", "")
+    parsed_data["Причина прекращения"] = record.get("Сообщение", {}).get("Причина прекращения", "")
+
+    # Extract 'Договор'
+    parsed_data["Договор"] = record.get("Сообщение", {}).get("Договор", "")
+
+    # Extract 'Срок финансовой аренды'
+    parsed_data["Срок финансовой аренды"] = record.get("Сообщение", {}).get("Срок финансовой аренды", "")
+
+    # Extract 'Лизингодатели'
+    publ = record.get("Публикатор", {})
+    parsed_data["Лизингодатели"] = f"{publ.get('name', '')}\nИНН\n{publ.get('ИНН', '')}\nОГРН\n{publ.get('ОГРН', '')}"
+
+    # Extract 'Лизингополучатели'
+    msg = record.get("Сообщение", {})
+    parsed_data["Лизингополучатели"] = msg.get("Лизингополучатели", "")
+
+    # Extract 'ИНН' and 'ОГРНИП'
+    parsed_data["ИНН"] = publ.get("ИНН", "")
+    parsed_data["ОГРНИП"] = msg.get("ОГРНИП", "")
+
+    # Extract 'Предмет финансовой аренды (лизинга)'
+    # Combine all identifiers, descriptions, and classifiers from the 'Предметы финансовой аренды (лизинга)' field
+    items = msg.get("Предметы финансовой аренды (лизинга)", {})
+    identificators = []
+    descriptions = []
+    classifiers = []
+
+    for key in items:
+        item = items[key]
+        identificators.append(item.get("Идентификатор", ""))
+        descriptions.append(item.get("Описание", ""))
+        classifiers.append(item.get("Классификатор", ""))
+
+    parsed_data["Предмет финансовой аренды (лизинга)"] = "\n".join(identificators)
+
+    # Extract 'Идентификатор'
+    parsed_data["Идентификатор"] = "\n".join(f"№{k}. {i}" for k, i in enumerate(identificators, 1))
+
+    # Extract 'Описание'
+    parsed_data["Описание"] = "\n".join(f"№{k}. {i}" for k, i in enumerate(descriptions, 1))
+
+    # Extract 'Классификатор'
+    parsed_data["Классификатор"] = "\n".join(f"№{k}. {i}" for k, i in enumerate(classifiers, 1))
+
+    # Extract 'Связанные сообщения'
+    related_messages = record.get("Связанные сообщения", {})
+    related_entries = []
+    for key, value in related_messages.items():
+        related_entries.append(f"{key} {value}")
+    parsed_data["Связанные сообщения"] = "\n".join(related_entries)
+
+    # Return the parsed data as a dictionary
+    return {k: parsed_data.get(k, "") for k in OUTPUT_COLUMNS}
 
 # Main script
 def main():
