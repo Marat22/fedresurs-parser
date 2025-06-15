@@ -1,149 +1,230 @@
 import json
-import os
-import argparse
-from datetime import datetime
 import pandas as pd
+import os
+from pathlib import Path
+from typing import Dict, List, Any, Set
+import glob
 
-# Define the output columns
-OUTPUT_COLUMNS = [
-    "Ссылка",
-    "Сообщение о договоре финансовой аренды",
-    "Дата прекращения",
-    "Причина прекращения",
-    "Договор",
-    "Срок финансовой аренды",
-    "Лизингодатели",
-    "Лизингополучатели",
-    "ИНН",
-    "ОГРНИП",
-    "Предмет финансовой аренды (лизинга)",
-    "Идентификатор",
-    "Описание",
-    "Классификатор",
-    "Связанные сообщения",
-]
 
-# Placeholder for parse_columns function
-def parse_columns(record: dict) -> dict:
+def read_json_files(folder_path: str) -> List[Dict]:
     """
-    Parse the record and return a dictionary with the required columns.
+    Read all JSON files from the specified directory in order.
+
+    Args:
+        folder_path: Path to directory containing JSON files
+
+    Returns:
+        List of dictionaries containing all JSON data
     """
-    parsed_data = {}
+    all_data = []
 
-    # Extract 'Ссылка'
-    parsed_data["Ссылка"] = record.get("url", "")
+    if not os.path.exists(folder_path):
+        print(f"Error: Directory {folder_path} does not exist")
+        return all_data
 
-    # Extract 'Сообщение о договоре финансовой аренды'
-    parsed_data["Сообщение о договоре финансовой аренды"] = record.get("Сообщение", {}).get("Договор", "")
+    # Get all JSON files and sort them
+    json_files = sorted(glob.glob(os.path.join(folder_path, "*.json")))
 
-    # Extract 'Дата прекращения' and 'Причина прекращения'
-    # This part is more complex and depends on the structure of the data.
-    # For now, we'll leave them as placeholders or empty strings.
-    parsed_data["Дата прекращения"] = record.get("Сообщение", {}).get("Дата прекращения", "")
-    parsed_data["Причина прекращения"] = record.get("Сообщение", {}).get("Причина прекращения", "")
+    if not json_files:
+        print(f"No JSON files found in {folder_path}")
+        return all_data
 
-    # Extract 'Договор'
-    parsed_data["Договор"] = record.get("Сообщение", {}).get("Договор", "")
+    print(f"Found {len(json_files)} JSON files in {folder_path}")
 
-    # Extract 'Срок финансовой аренды'
-    parsed_data["Срок финансовой аренды"] = record.get("Сообщение", {}).get("Срок финансовой аренды", "")
+    for file_path in json_files:
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                all_data.append(data)
+                print(f"Successfully read: {os.path.basename(file_path)}")
+        except Exception as e:
+            print(f"Error reading {file_path}: {e}")
 
-    # Extract 'Лизингодатели'
-    publ = record.get("Публикатор", {})
-    parsed_data["Лизингодатели"] = f"{publ.get('name', '')}\nИНН\n{publ.get('ИНН', '')}\nОГРН\n{publ.get('ОГРН', '')}"
+    return all_data
 
-    # Extract 'Лизингополучатели'
-    msg = record.get("Сообщение", {})
-    parsed_data["Лизингополучатели"] = msg.get("Лизингополучатели", "")
 
-    # Extract 'ИНН' and 'ОГРНИП'
-    parsed_data["ИНН"] = publ.get("ИНН", "")
-    parsed_data["ОГРНИП"] = msg.get("ОГРНИП", "")
+def extract_special_fields(record: Dict) -> Dict[str, str]:
+    """
+    Extract and format special fields: 'Связанные сообщения' and 'Предметы финансовой аренды (лизинга)'.
 
-    # Extract 'Предмет финансовой аренды (лизинга)'
-    # Combine all identifiers, descriptions, and classifiers from the 'Предметы финансовой аренды (лизинга)' field
-    items = msg.get("Предметы финансовой аренды (лизинга)", {})
-    identificators = []
-    descriptions = []
-    classifiers = []
+    Args:
+        record: Single record from JSON data
 
-    for key in items:
-        item = items[key]
-        identificators.append(item.get("Идентификатор", ""))
-        descriptions.append(item.get("Описание", ""))
-        classifiers.append(item.get("Классификатор", ""))
+    Returns:
+        Dictionary with formatted special fields
+    """
+    special_fields = {}
 
-    parsed_data["Предмет финансовой аренды (лизинга)"] = "\n".join(identificators)
+    # Handle "Связанные сообщения"
+    if 'Сообщение' in record and 'Связанные сообщения' in record['Сообщение']:
+        related_messages = record['Сообщение']['Связанные сообщения']
+        formatted_messages = []
 
-    # Extract 'Идентификатор'
-    parsed_data["Идентификатор"] = "\n".join(f"№{k}. {i}" for k, i in enumerate(identificators, 1))
+        for key, value in related_messages.items():
+            formatted_messages.append(f'{key}: "{value}"')
 
-    # Extract 'Описание'
-    parsed_data["Описание"] = "\n".join(f"№{k}. {i}" for k, i in enumerate(descriptions, 1))
+        special_fields['Связанные сообщения'] = '\n'.join(formatted_messages)
 
-    # Extract 'Классификатор'
-    parsed_data["Классификатор"] = "\n".join(f"№{k}. {i}" for k, i in enumerate(classifiers, 1))
+    # Handle "Предметы финансовой аренды (лизинга)"
+    if 'Сообщение' in record and 'Предметы финансовой аренды (лизинга)' in record['Сообщение']:
+        items = record['Сообщение']['Предметы финансовой аренды (лизинга)']
 
-    # Extract 'Связанные сообщения'
-    related_messages = record.get("Связанные сообщения", {})
-    related_entries = []
-    for key, value in related_messages.items():
-        related_entries.append(f"{key} {value}")
-    parsed_data["Связанные сообщения"] = "\n".join(related_entries)
+        identifiers = []
+        classifiers = []
+        descriptions = []
 
-    # Return the parsed data as a dictionary
-    return {k: parsed_data.get(k, "") for k in OUTPUT_COLUMNS}
+        for key, item in items.items():
+            identifiers.append(f"{key}. {item.get('Идентификатор', 'нет данных')}")
+            classifiers.append(f"{key}. {item.get('Классификатор', 'нет данных')}")
+            descriptions.append(f"{key}. {item.get('Описание', 'нет данных')}")
 
-# Main script
-def main():
-    # Parse command-line arguments
-    parser = argparse.ArgumentParser(description="Process JSON files and generate an Excel output.")
-    parser.add_argument("--debug", action="store_true", help="Enable debug mode (use ISO timestamp for output filename).")
-    parser.add_argument("--force-recreate", action="store_true", help="Force recreate the output file.")
-    args = parser.parse_args()
+        special_fields['Идентификатор'] = ' \n'.join(identifiers)
+        special_fields['Классификатор'] = ' \n'.join(classifiers)
+        special_fields['Описание'] = ' \n'.join(descriptions)
 
-    # Directory containing JSON files
-    raw_contents_dir = "3raw_contents"
-    json_files = sorted([f for f in os.listdir(raw_contents_dir) if f.endswith(".json")])
+    return special_fields
 
-    # Output filename
-    if args.debug:
-        output_filename = f"{datetime.now().isoformat()}.xlsx"
-    else:
-        output_filename = "final.xlsx"
 
-    # Check if output file exists and should be recreated
-    # if os.path.exists(output_filename) and not args.force_recreate:
-    #     print(f"Output file '{output_filename}' already exists. Use --force-recreate to overwrite.")
-    #     return
+def flatten_record(record: Dict, parent_key: str = '', separator: str = ' ') -> Dict[str, Any]:
+    """
+    Flatten nested dictionary structure.
 
-    # Initialize a list to store all parsed records
-    all_records = []
+    Args:
+        record: Dictionary to flatten
+        parent_key: Parent key for nested structure
+        separator: Separator for nested keys
+
+    Returns:
+        Flattened dictionary
+    """
+    items = []
+
+    for key, value in record.items():
+        new_key = f"{key} ({parent_key})" if parent_key else key
+
+        if isinstance(value, dict):
+            # Skip special nested objects that are handled separately
+            if key in ['Связанные сообщения', 'Предметы финансовой аренды (лизинга)']:
+                continue
+            items.extend(flatten_record(value, new_key, separator).items())
+        else:
+            items.append((new_key, value))
+
+    return dict(items)
+
+
+def get_all_columns(all_records: List[Dict]) -> Set[str]:
+    """
+    Get all unique column names from all records.
+
+    Args:
+        all_records: List of all flattened records
+
+    Returns:
+        Set of all unique column names
+    """
+    all_columns = set()
+
+    for record in all_records:
+        all_columns.update(record.keys())
+
+    return all_columns
+
+
+def process_single_record(url: str, record_data: Dict) -> Dict[str, Any]:
+    """
+    Process a single record and extract all data.
+
+    Args:
+        url: URL key for the record
+        record_data: The record data
+
+    Returns:
+        Processed record as dictionary
+    """
+    # Start with the URL
+    processed_record = {'url': url}
+
+    # Extract special fields first
+    special_fields = extract_special_fields(record_data)
+    processed_record.update(special_fields)
+
+    # Flatten the regular fields
+    flattened = flatten_record(record_data)
+    processed_record.update(flattened)
+
+    return processed_record
+
+
+def convert_to_excel(json_data_list: List[Dict], output_file: str) -> None:
+    """
+    Convert JSON data to Excel format.
+
+    Args:
+        json_data_list: List of JSON data from files
+        output_file: Output Excel file path
+    """
+    all_processed_records = []
 
     # Process each JSON file
-    for json_file in json_files:
-        file_path = os.path.join(raw_contents_dir, json_file)
-        print(f"Processing file: {file_path}")
+    for json_data in json_data_list:
+        for url, record_data in json_data.items():
+            processed_record = process_single_record(url, record_data)
+            all_processed_records.append(processed_record)
 
-        # Load the JSON file
-        with open(file_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
+    if not all_processed_records:
+        print("No records to process")
+        return
 
-        # Extract records from the JSON file
-        for url, record in data.items():
-            try:
-                # Parse the record and append to the list
-                parsed_record = parse_columns(record)
-                all_records.append(parsed_record)
-            except Exception as e:
-                print(f"Error processing record in {file_path}: {e}")
+    # Get all unique columns
+    all_columns = get_all_columns(all_processed_records)
 
-    # Create a DataFrame from the parsed records
-    df = pd.DataFrame(all_records, columns=OUTPUT_COLUMNS)
+    # Create DataFrame with all columns
+    df = pd.DataFrame(all_processed_records)
 
-    # Write the DataFrame to an Excel file
-    df.to_excel(output_filename, index=False)
-    print(f"Output written to {output_filename}")
+    # Reorder columns to put special fields first
+    special_columns = ['url', 'Идентификатор', 'Классификатор', 'Описание', 'Связанные сообщения']
+    remaining_columns = [col for col in df.columns if col not in special_columns]
+
+    # Order columns: special fields first, then others
+    ordered_columns = [col for col in special_columns if col in df.columns] + sorted(remaining_columns)
+    df = df.reindex(columns=ordered_columns)
+
+    # Save to Excel
+    df.to_excel(output_file, index=False, engine='openpyxl')
+    print(f"Excel file saved: {output_file}")
+    print(f"Total records processed: {len(all_processed_records)}")
+    print(f"Total columns: {len(df.columns)}")
+
+
+def main():
+    """
+    Main function to process JSON files and create Excel output.
+    """
+    # Define the directory path
+    directory_path = "3raw_contents"
+
+    # Output file name
+    output_file = "consolidated_data.xlsx"
+
+    try:
+        # Read all JSON files from the directory
+        print(f"Reading JSON files from directory: {directory_path}")
+        json_data_list = read_json_files(directory_path)
+
+        if not json_data_list:
+            print("No JSON data found. Please check your directory path and ensure it contains JSON files.")
+            return
+
+        # Convert to Excel
+        print("Converting to Excel...")
+        convert_to_excel(json_data_list, output_file)
+
+        print("Process completed successfully!")
+
+    except Exception as e:
+        print(f"Error during processing: {e}")
+
 
 if __name__ == "__main__":
     main()
