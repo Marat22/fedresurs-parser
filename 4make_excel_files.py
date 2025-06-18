@@ -1,7 +1,7 @@
 import glob
 import json
 import os
-from typing import Dict, List, Any, Set
+from typing import Dict, List, Any, Set, Tuple, Optional
 
 import pandas as pd
 
@@ -88,6 +88,43 @@ def extract_special_fields(record: Dict) -> Dict[str, str]:
     return special_fields
 
 
+def parse_lessor_info(lessor_str: str) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Parse lessor string to extract INN and OGRN values.
+
+    Args:
+        lessor_str: Raw string from "Лизингодатели" field
+
+    Returns:
+        Tuple containing (INN, OGRN) with None values if not found
+    """
+    if not isinstance(lessor_str, str):
+        return None, None
+
+    # Split into parts and clean empty strings
+    parts = [part.strip() for part in lessor_str.split('\n') if part.strip()]
+
+    # Try to find INN/OGRN using predictable patterns
+    inn, ogrn = None, None
+
+    try:
+        for i, part in enumerate(parts):
+            if part == "ИНН" and i + 1 < len(parts):
+                inn = parts[i + 1]
+            elif part == "ОГРН" and i + 1 < len(parts):
+                ogrn = parts[i + 1]
+
+        # Validate extracted values (simple digit checks)
+        if inn and not inn.isdigit():
+            inn = None
+        if ogrn and not ogrn.isdigit():
+            ogrn = None
+    except Exception:
+        pass
+
+    return inn, ogrn
+
+
 def flatten_record(record: Dict, parent_key: str = '', separator: str = ' ') -> Dict[str, Any]:
     """
     Flatten nested dictionary structure.
@@ -161,6 +198,15 @@ def process_single_record(url: str, record_data: Dict) -> Dict[str, Any]:
         processed_record['Основной заголовок'] = ''
         processed_record['Подзаголовок'] = ''
 
+    # Extract lessor info if available
+    lessor_field = None
+    if 'Сообщение' in record_data and 'Лизингодатели' in record_data['Сообщение']:
+        lessor_field = record_data['Сообщение']['Лизингодатели']
+
+    inn, ogrn = parse_lessor_info(lessor_field) if lessor_field else (None, None)
+    processed_record['ИНН Лизингодателя'] = inn
+    processed_record['ОГРН Лизингодателя'] = ogrn
+
     # Flatten the regular fields
     flattened = flatten_record(record_data)
     processed_record.update(flattened)
@@ -206,6 +252,8 @@ def create_dataframe(processed_records: List[Dict]) -> pd.DataFrame:
         'url',
         'Основной заголовок',
         'Подзаголовок',
+        'ИНН Лизингодателя',
+        'ОГРН Лизингодателя',
         'Идентификатор',
         'Классификатор',
         'Описание',
