@@ -636,7 +636,7 @@ def process_links(input_file: str, output_dir: str, force_recreate: bool, show_b
                 processed_count += 1
                 
                 # Save periodically (every 10 links)
-                if processed_count % 1 == 0:
+                if processed_count % 10 == 0:
                     save_results(output_file, year_results)
                     print(f"    Saved intermediate results ({processed_count} new)")
                 
