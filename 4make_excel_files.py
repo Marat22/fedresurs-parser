@@ -5,6 +5,9 @@ from typing import Dict, List, Any, Set
 
 import pandas as pd
 
+from openpyxl import Workbook
+from openpyxl.styles import Font
+from openpyxl.utils import get_column_letter
 
 def read_json_files(folder_path: str) -> List[Dict]:
     """
@@ -167,47 +170,139 @@ def process_single_record(url: str, record_data: Dict) -> Dict[str, Any]:
 
 def convert_to_excel(json_data_list: List[Dict], output_file: str) -> None:
     """
-    Convert JSON data to Excel format with clickable hyperlinks in the 'url' column.
+    Convert JSON data to Excel format with clickable hyperlinks
     """
-    all_processed_records = []
+    # Step 1: Process all records
+    processed_records = process_records(json_data_list)
+    if not processed_records:
+        return
 
-    # Process each JSON file
+    # Step 2: Create and organize DataFrame
+    df = create_dataframe(processed_records)
+
+    # Step 3: Save with hyperlink processing
+    save_with_hyperlinks(df, output_file)
+
+
+def process_records(json_data_list: List[Dict]) -> List[Dict]:
+    """Process all JSON records into structured dictionaries"""
+    processed_records = []
     for json_data in json_data_list:
         for url, record_data in json_data.items():
             processed_record = process_single_record(url, record_data)
-            all_processed_records.append(processed_record)
+            processed_records.append(processed_record)
 
-    if not all_processed_records:
+    if not processed_records:
         print("No records to process")
+    return processed_records
+
+
+def create_dataframe(processed_records: List[Dict]) -> pd.DataFrame:
+    """Create organized DataFrame with proper column ordering"""
+    df = pd.DataFrame(processed_records)
+
+    # Define column groups and ordering
+    special_columns = [
+        'url',
+        'Основной заголовок',
+        'Подзаголовок',
+        'Идентификатор',
+        'Классификатор',
+        'Описание',
+        'Связанные сообщения'
+    ]
+
+    # Filter existing columns and order them
+    existing_special_cols = [col for col in special_columns if col in df.columns]
+    other_columns = sorted([col for col in df.columns if col not in special_columns])
+
+    return df.reindex(columns=existing_special_cols + other_columns)
+
+
+def save_with_hyperlinks(df: pd.DataFrame, output_file: str) -> None:
+    """Save DataFrame to Excel with proper hyperlink formatting"""
+    # Step 1: Save initial version
+    temp_file = f"temp_{output_file}"
+    try:
+        df.to_excel(temp_file, index=False, engine='openpyxl')
+        print(f"Temporary file saved: {temp_file}")
+    except Exception as e:
+        print(f"Error saving temporary file: {e}")
         return
 
-    # Create DataFrame with all columns
-    df = pd.DataFrame(all_processed_records)
-
-    # Reorder columns to put special fields first
-    special_columns = ['url', 'Основной заголовок', 'Подзаголовок', 'Идентификатор', 'Классификатор', 'Описание', 'Связанные сообщения']
-    remaining_columns = [col for col in df.columns if col not in special_columns]
-
-    # Order columns: special fields first, then others
-    ordered_columns = [col for col in special_columns if col in df.columns] + sorted(remaining_columns)
-    df = df.reindex(columns=ordered_columns)
-
-    # Optional: Save original URLs for reference
-    df['original_url'] = df['url']
-
-    # Format 'url' column as Excel HYPERLINK formula
-    df['url'] = df['url'].apply(
-        lambda x: f'=HYPERLINK("{x}", "{x}")' if pd.notna(x) and x.startswith('http') else x
-    )
-
-    # Save to Excel
+    # Step 2: Add hyperlinks
     try:
-        df.to_excel(output_file, index=False, engine='openpyxl')
-        print(f"Excel file saved: {output_file}")
-        print(f"Total records processed: {len(all_processed_records)}")
-        print(f"Total columns: {len(df.columns)}")
+        add_hyperlinks(temp_file, output_file)
+        os.remove(temp_file)
+        print(f"Removed temporary file: {temp_file}")
     except Exception as e:
-        print(f"Error saving Excel file: {e}")
+        print(f"Error processing hyperlinks: {e}")
+        # Fallback: use temp file as final output
+        os.rename(temp_file, output_file)
+        print(f"Saved without hyperlinks as: {output_file}")
+
+
+def add_hyperlinks(input_path: str, output_path: str) -> None:
+    """Add Excel hyperlink formatting to URL column"""
+    from openpyxl import load_workbook
+
+    wb = load_workbook(input_path)
+    ws = wb.active
+
+    # Find URL column
+    url_col_idx = find_column_index(ws, 'url')
+    if not url_col_idx:
+        print("URL column not found - saving without hyperlinks")
+        wb.save(output_path)
+        return
+
+    # Apply hyperlink formatting
+    blue_font = Font(color="0000FF", underline="single")
+    for row in range(2, ws.max_row + 1):  # Skip header row
+        cell = ws.cell(row=row, column=url_col_idx)
+        url = cell.value
+        if valid_url(url):
+            cell.hyperlink = url
+            cell.font = blue_font
+
+    # Adjust column widths for readability
+    auto_adjust_columns(ws)
+
+    wb.save(output_path)
+    print(f"Saved final workbook with hyperlinks: {output_path}")
+
+
+# Helper functions
+def find_column_index(worksheet, column_name: str) -> int:
+    """Find column index by header name"""
+    for idx, col in enumerate(worksheet.iter_cols(max_row=1), 1):
+        if col[0].value == column_name:
+            return idx
+    return None
+
+
+def valid_url(url: Any) -> bool:
+    """Validate URL format"""
+    return isinstance(url, str) and url.startswith('http')
+
+
+def auto_adjust_columns(worksheet, max_width: int = 100) -> None:
+    """Auto-adjust column widths with maximum limit"""
+    from openpyxl.utils import get_column_letter
+
+    for column in worksheet.columns:
+        col_letter = get_column_letter(column[0].column)
+        max_length = 0
+
+        for cell in column:
+            try:
+                max_length = max(max_length, len(str(cell.value)))
+            except:
+                pass
+
+        adjusted_width = min(max_length + 2, max_width)
+        worksheet.column_dimensions[col_letter].width = adjusted_width
+
 
 def main():
     """
