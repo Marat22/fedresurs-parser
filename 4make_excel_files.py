@@ -1,9 +1,9 @@
-import json
-import pandas as pd
-import os
-from pathlib import Path
-from typing import Dict, List, Any, Set
 import glob
+import json
+import os
+from typing import Dict, List, Any, Set
+
+import pandas as pd
 
 
 def read_json_files(folder_path: str) -> List[Dict]:
@@ -104,7 +104,7 @@ def flatten_record(record: Dict, parent_key: str = '', separator: str = ' ') -> 
 
         if isinstance(value, dict):
             # Skip special nested objects that are handled separately
-            if key in ['Связанные сообщения', 'Предметы финансовой аренды (лизинга)']:
+            if key in ['Связанные сообщения', 'Предметы финансовой аренды (лизинга)', 'ЗАГОЛОВОК']:
                 continue
             items.extend(flatten_record(value, new_key, separator).items())
         else:
@@ -149,6 +149,15 @@ def process_single_record(url: str, record_data: Dict) -> Dict[str, Any]:
     special_fields = extract_special_fields(record_data)
     processed_record.update(special_fields)
 
+    # Extract header fields
+    if 'ЗАГОЛОВОК' in record_data:
+        header_data = record_data['ЗАГОЛОВОК']
+        processed_record['Основной заголовок'] = header_data.get('Основной заголовок', '')
+        processed_record['Подзаголовок'] = header_data.get('Подзаголовок', '')
+    else:
+        processed_record['Основной заголовок'] = ''
+        processed_record['Подзаголовок'] = ''
+
     # Flatten the regular fields
     flattened = flatten_record(record_data)
     processed_record.update(flattened)
@@ -158,11 +167,7 @@ def process_single_record(url: str, record_data: Dict) -> Dict[str, Any]:
 
 def convert_to_excel(json_data_list: List[Dict], output_file: str) -> None:
     """
-    Convert JSON data to Excel format.
-
-    Args:
-        json_data_list: List of JSON data from files
-        output_file: Output Excel file path
+    Convert JSON data to Excel format with clickable hyperlinks in the 'url' column.
     """
     all_processed_records = []
 
@@ -176,26 +181,33 @@ def convert_to_excel(json_data_list: List[Dict], output_file: str) -> None:
         print("No records to process")
         return
 
-    # Get all unique columns
-    all_columns = get_all_columns(all_processed_records)
-
     # Create DataFrame with all columns
     df = pd.DataFrame(all_processed_records)
 
     # Reorder columns to put special fields first
-    special_columns = ['url', 'Идентификатор', 'Классификатор', 'Описание', 'Связанные сообщения']
+    special_columns = ['url', 'Основной заголовок', 'Подзаголовок', 'Идентификатор', 'Классификатор', 'Описание', 'Связанные сообщения']
     remaining_columns = [col for col in df.columns if col not in special_columns]
 
     # Order columns: special fields first, then others
     ordered_columns = [col for col in special_columns if col in df.columns] + sorted(remaining_columns)
     df = df.reindex(columns=ordered_columns)
 
-    # Save to Excel
-    df.to_excel(output_file, index=False, engine='openpyxl')
-    print(f"Excel file saved: {output_file}")
-    print(f"Total records processed: {len(all_processed_records)}")
-    print(f"Total columns: {len(df.columns)}")
+    # Optional: Save original URLs for reference
+    df['original_url'] = df['url']
 
+    # Format 'url' column as Excel HYPERLINK formula
+    df['url'] = df['url'].apply(
+        lambda x: f'=HYPERLINK("{x}", "{x}")' if pd.notna(x) and x.startswith('http') else x
+    )
+
+    # Save to Excel
+    try:
+        df.to_excel(output_file, index=False, engine='openpyxl')
+        print(f"Excel file saved: {output_file}")
+        print(f"Total records processed: {len(all_processed_records)}")
+        print(f"Total columns: {len(df.columns)}")
+    except Exception as e:
+        print(f"Error saving Excel file: {e}")
 
 def main():
     """
@@ -204,8 +216,8 @@ def main():
     # Define the directory path
     directory_path = "3raw_contents"
 
-    # Output file name
-    output_file = "consolidated_data.xlsx"
+    # Output file name changed to "output.xlsx"
+    output_file = "output.xlsx"
 
     try:
         # Read all JSON files from the directory
