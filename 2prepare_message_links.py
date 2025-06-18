@@ -181,13 +181,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Process monthly links from Fedresurs')
     parser.add_argument('--force-recreate', action='store_true',
                         help='Recreate output file even if it exists')
-    parser.add_argument('--show', action='store_true',  # Added show flag
-                        help='Show browser during processing (disable headless mode)')
     args = parser.parse_args()
     
     process_links_file(
         "1month_links.json", 
         "2month_links.json", 
         force_recreate=args.force_recreate,
-        headless=not args.show  # Invert show flag to headless parameter
+        headless=False  # НЕ ТРОГАТЬ! по-другому не работает
     )
