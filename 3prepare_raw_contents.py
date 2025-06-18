@@ -48,18 +48,17 @@ def setup_driver(headless: bool = True) -> webdriver.Chrome:
 
 def parse_contents(driver: webdriver.Chrome, url: str) -> Dict[str, Any]:
     """
-    Parse content from the given URL, extracting Публикатор, Сообщение, and Связанные сообщения sections.
+    Main function to parse content from the given URL.
 
     Args:
         driver: Chrome WebDriver instance
         url: URL to parse
 
     Returns:
-        Dictionary with parsed content including 'Публикатор', 'Сообщение', and 'Связанные сообщения'
+        Dictionary with parsed content or error information
     """
     try:
         driver.get(url)
-        # Wait for page to load
         WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((By.TAG_NAME, "body"))
         )
@@ -67,21 +66,7 @@ def parse_contents(driver: webdriver.Chrome, url: str) -> Dict[str, Any]:
         load_all_messages(driver)
 
         parsed_data = {"url": url}
-
-        # Parse Публикатор section
-        publisher_data = parse_publisher_section(driver)
-        if publisher_data:
-            parsed_data["Публикатор"] = publisher_data
-
-        # Parse Сообщение section
-        message_data = parse_message_section(driver)
-        if message_data:
-            parsed_data["Сообщение"] = message_data
-
-        # Parse Связанные сообщения section
-        related_messages = parse_related_messages(driver)
-        if related_messages:
-            parsed_data["Связанные сообщения"] = related_messages
+        parsed_data.update(parse_page_sections(driver))
 
         return parsed_data
 
@@ -107,7 +92,7 @@ def load_all_messages(driver: webdriver.Chrome, timeout: int = 30) -> None:
     while click_count < timeout:
         try:
             # Wait for the button to become clickable
-            load_more_button = WebDriverWait(driver, 10).until(
+            load_more_button = WebDriverWait(driver, 2).until(
                 EC.element_to_be_clickable((By.CLASS_NAME, "more_btn_orange"))
             )
             # Scroll the button into view (helps prevent click issues)
@@ -127,6 +112,54 @@ def load_all_messages(driver: webdriver.Chrome, timeout: int = 30) -> None:
         except Exception as e:
             print(f"Unexpected error while loading more messages: {e}")
             break
+
+
+def parse_page_sections(driver: webdriver.Chrome) -> Dict[str, Any]:
+    """Parse all main sections of the page."""
+    parsed_data = {}
+
+    # Parse each section with separate functions
+    parsed_data["ЗАГОЛОВОК"] = parse_header(driver)
+
+    publisher_data = parse_publisher_section(driver)
+    if publisher_data:
+        parsed_data["Публикатор"] = publisher_data
+
+    message_data = parse_message_section(driver)
+    if message_data:
+        parsed_data["Сообщение"] = message_data
+
+    related_messages = parse_related_messages(driver)
+    if related_messages:
+        parsed_data["Связанные сообщения"] = related_messages
+
+    return parsed_data
+
+
+def parse_header(driver: webdriver.Chrome) -> Dict[str, str]:
+    """Parse header information from the page.
+
+    Returns:
+        Dictionary with main header and subheader text
+    """
+    header_data = {
+        "Основной заголовок": "",
+        "Подзаголовок": ""
+    }
+
+    try:
+        main_header = driver.find_element(By.CLASS_NAME, "headertext")
+        header_data["Основной заголовок"] = main_header.text.strip()
+    except NoSuchElementException:
+        pass
+
+    try:
+        subheader = driver.find_element(By.CSS_SELECTOR, ".d-flex.align-items-center.header-item")
+        header_data["Подзаголовок"] = subheader.text.strip()
+    except NoSuchElementException:
+        pass
+
+    return header_data
 
 
 def parse_publisher_section(driver) -> Optional[Dict[str, Any]]:
