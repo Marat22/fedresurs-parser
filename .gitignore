@@ -1,0 +1,7 @@
+/BACKUPS/*
+/3raw_contents
+*.json
+*.xlsx
+*__pycache__*
+venv
+.idea
