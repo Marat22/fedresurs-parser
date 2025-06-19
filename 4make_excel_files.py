@@ -269,26 +269,34 @@ def create_dataframe(processed_records: List[Dict]) -> pd.DataFrame:
 
 def save_with_hyperlinks(df: pd.DataFrame, output_file: str) -> None:
     """Save DataFrame to Excel with proper hyperlink formatting"""
-    # Step 1: Save initial version
-    temp_file = f"temp_{output_file}"
-    try:
-        df.to_excel(temp_file, index=False, engine='openpyxl')
-        print(f"Temporary file saved: {temp_file}")
-    except Exception as e:
-        print(f"Error saving temporary file: {e}")
-        return
+    import tempfile
 
-    # Step 2: Add hyperlinks
+    # Create a temporary file with .xlsx extension
+    with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as tmpfile:
+        temp_path = tmpfile.name
+        print(f"Using temporary file: {temp_path}")
+
     try:
-        add_hyperlinks(temp_file, output_file)
-        os.remove(temp_file)
-        print(f"Removed temporary file: {temp_file}")
+        # Step 1: Save initial version to temp file
+        df.to_excel(temp_path, index=False, engine='openpyxl')
+        print(f"Temporary file saved: {temp_path}")
+
+        # Step 2: Add hyperlinks and re-save
+        add_hyperlinks(temp_path, output_file)
+        print(f"Saved final file with hyperlinks: {output_file}")
+
+        # Cleanup
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+
     except Exception as e:
         print(f"Error processing hyperlinks: {e}")
-        # Fallback: use temp file as final output
-        os.rename(temp_file, output_file)
-        print(f"Saved without hyperlinks as: {output_file}")
-
+        # Fallback: try to copy without hyperlinks
+        try:
+            df.to_excel(output_file, index=False)
+            print(f"Saved without hyperlinks as: {output_file}")
+        except Exception as e2:
+            print(f"Final fallback failed too: {e2}")
 
 def add_hyperlinks(input_path: str, output_path: str) -> None:
     """Add Excel hyperlink formatting to URL column"""
