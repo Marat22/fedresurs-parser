@@ -18,6 +18,9 @@ from webdriver_manager.chrome import ChromeDriverManager
 # Create backup directory paths
 BACKUPS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "BACKUPS")
 STEP_BACKUPS_DIR = os.path.join(BACKUPS_DIR, "2_STEP_backups")
+INPUT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "1month_links.json")
+OUTPUT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "2month_links.json")
+
 
 # Generate single backup filename at program start
 backup_filename = f"{datetime.now().strftime('%Y-%m-%dT%H-%M-%S.%f')}_2month_links.json"
@@ -232,8 +235,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     process_links_file(
-        "1month_links.json",
-        "2month_links.json",
+        INPUT_PATH,
+        OUTPUT_PATH,
         force_recreate=args.force_recreate,
         headless=False  # НЕ ТРОГАТЬ! по-другому не работает
     )

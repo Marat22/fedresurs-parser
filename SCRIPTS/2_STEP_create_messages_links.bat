@@ -1,4 +1,5 @@
 @echo off
+chcp 65001 > nul
 setlocal enabledelayedexpansion
 
 echo Сейчас будут сохранены ссылки сообщений, которые надо запарсить

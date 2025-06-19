@@ -22,8 +22,9 @@ from datetime import datetime
 import shutil
 
 # Global variable for backup directory
-BACKUP_DIR = None
-
+BACKUP_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "BACKUPS", "3_STEP_backups", datetime.now().strftime("%Y-%m-%dT%H-%M-%S.%f"))
+INPUT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "2month_links.json")
+OUTPUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "3raw_contents")
 
 def setup_driver(headless: bool = True) -> webdriver.Chrome:
     """
@@ -615,8 +616,6 @@ def process_links(input_file: str, output_dir: str, force_recreate: bool, show_b
     """
     # Initialize backup directory
     global BACKUP_DIR
-    timestamp = datetime.now().strftime("%Y-%m-%dT%H-%M-%S.%f")
-    BACKUP_DIR = os.path.join("BACKUPS", "3_STEP_backups", timestamp)
     os.makedirs(BACKUP_DIR, exist_ok=True)
     print(f"Backups will be stored in: {BACKUP_DIR}")
 
@@ -715,19 +714,17 @@ def main():
     args = parser.parse_args()
 
     # Configuration
-    input_file = "2month_links.json"
-    output_dir = "3raw_contents"
 
     # Validate input file exists
-    if not os.path.exists(input_file):
-        print(f"Error: Input file '{input_file}' not found")
+    if not os.path.exists(INPUT_FILE):
+        print(f"Error: Input file '{INPUT_FILE}' not found")
         return 1
 
     # Create output directory
-    os.makedirs(output_dir, exist_ok=True)
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
 
     try:
-        process_links(input_file, output_dir, args.force_recreate, args.show)
+        process_links(INPUT_FILE, OUTPUT_DIR, args.force_recreate, args.show)
         print("Processing completed successfully!")
         return 0
 

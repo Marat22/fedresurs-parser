@@ -1,8 +1,12 @@
 import datetime
+import os
 from urllib.parse import quote
 import json
 import sys
 import argparse
+
+
+OUTPUT_PATH = full_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '1month_links.json')
 
 
 def parse_date(date_str):
@@ -63,10 +67,10 @@ def save_links_to_json(search_string, start_date, end_date):
     links_data = [{"month": month, "url": url} for month, url in monthly_links]
 
     # Save to JSON file
-    with open('1month_links.json', 'w', encoding='utf-8') as f:
+    with open(OUTPUT_PATH, 'w', encoding='utf-8') as f:
         json.dump(links_data, f, ensure_ascii=False, indent=2)
 
-    print(f"Successfully saved {len(links_data)} monthly links to 1month_links.json")
+    print(f"Successfully saved {len(links_data)} monthly links to {OUTPUT_PATH}")
     print(f"Date range: {start_date.strftime('%Y-%m')} to {end_date.strftime('%Y-%m')}")
     print(f"Search string: '{search_string}'")
 

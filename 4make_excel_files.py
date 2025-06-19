@@ -357,10 +357,10 @@ def main():
     Main function to process JSON files and create Excel output.
     """
     # Define the directory path
-    directory_path = "3raw_contents"
+    directory_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "3raw_contents")
 
     # Output file name changed to "output.xlsx"
-    output_file = "output.xlsx"
+    output_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "output.xlsx")
 
     try:
         # Read all JSON files from the directory
