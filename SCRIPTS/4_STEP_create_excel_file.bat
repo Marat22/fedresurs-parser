@@ -18,7 +18,7 @@ call ../venv/Scripts/activate
 python ../4make_excel_files.py
 
 :: Проверяем результат
-if exist "output.xlsx" (
+if exist "../output.xlsx" (
     echo.
     echo ______________________________________________________________________________
     echo ✔ Файл output.xlsx успешно создан!
