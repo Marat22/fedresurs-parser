@@ -21,7 +21,6 @@ STEP_BACKUPS_DIR = os.path.join(BACKUPS_DIR, "2_STEP_backups")
 INPUT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "1month_links.json")
 OUTPUT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "2month_links.json")
 
-
 # Generate single backup filename at program start
 backup_filename = f"{datetime.now().strftime('%Y-%m-%dT%H-%M-%S.%f')}_2month_links.json"
 backup_path = os.path.join(STEP_BACKUPS_DIR, backup_filename)
@@ -85,7 +84,7 @@ class PageLoader:
         print(f"Total clicks: {click_count}")
         return self.driver
 
-    def get_all_links(self):
+    def get_all_links(self, keyword='прекращение'):
         """Extract links by clicking each block and capturing the URL"""
         print("Extracting links by clicking blocks...")
 
@@ -95,8 +94,41 @@ class PageLoader:
         )
         print(f"Found {len(anchors)} links to process")
 
+        # Filter anchors by keyword if provided
+        filtered_anchors = []
+        skipped_by_keyword = 0
+
+        if keyword:  # Only filter if keyword is not empty
+            print(f"Filtering anchors by keyword: '{keyword}' (case-insensitive)")
+            keyword_lower = keyword.lower()
+
+            for anchor in anchors:
+                try:
+                    # Find the parent block for the anchor
+                    block = anchor.find_element(
+                        By.XPATH,
+                        "./ancestor::div[contains(@class, 'u-card-result__wrapper')]"
+                    )
+                    block_text = block.text.lower()
+
+                    # Check if keyword exists in block text
+                    if keyword_lower in block_text:
+                        filtered_anchors.append(anchor)
+                    else:
+                        skipped_by_keyword += 1
+                except Exception as e:
+                    print(f"Error finding parent block: {str(e)}. Skipping anchor...")
+                    skipped_by_keyword += 1
+        else:
+            filtered_anchors = anchors  # No filtering when keyword is empty
+
+        print(f"Filtered: {len(filtered_anchors)} anchors remain, skipped {skipped_by_keyword}")
+        anchors = filtered_anchors  # Use filtered list for processing
+        print(f"Processing {len(anchors)} links...")
+
         links = []
         processed_count = 0
+        duplicate_count = 0
 
         for anchor in anchors:
             try:
@@ -120,7 +152,7 @@ class PageLoader:
 
                 # Switch to the new tab
                 new_window = [handle for handle in self.driver.window_handles
-                            if handle != original_window][0]
+                              if handle != original_window][0]
                 self.driver.switch_to.window(new_window)
 
                 # Wait for the page to load
@@ -135,6 +167,7 @@ class PageLoader:
                     processed_count += 1
                     print(f"Processed {processed_count}/{len(anchors)}: {detail_url}")
                 else:
+                    duplicate_count += 1
                     print(f"Skipped duplicate: {detail_url}")
 
                 # Close the detail tab
@@ -149,13 +182,15 @@ class PageLoader:
                 if self.main_window_handle in self.driver.window_handles:
                     self.driver.switch_to.window(self.main_window_handle)
 
-        print(f"Successfully processed {processed_count}/{len(anchors)} links")
+        print(f"Successfully processed {len(links)} links")
+        print(f"Summary: {duplicate_count} duplicates skipped, {skipped_by_keyword} skipped by keyword")
         return links
 
     def close(self):
         if self.driver:
             self.driver.quit()
             self.driver = None
+
 
 def initialize_output_file(input_file, output_file, force_recreate=False):
     """Create output file if it doesn't exist or force recreate is requested"""
@@ -172,7 +207,7 @@ def initialize_output_file(input_file, output_file, force_recreate=False):
     return False
 
 
-def process_links_file(input_file, output_file, force_recreate=False, headless=True):
+def process_links_file(input_file, output_file, force_recreate=False, headless=True, keyword='прекращение'):
     """Process all URLs in JSON file and update with extracted links"""
     create_backup_dirs()  # Ensure backup directories exist
 
@@ -200,7 +235,7 @@ def process_links_file(input_file, output_file, force_recreate=False, headless=T
 
             print(f"\n{'=' * 50}\nProcessing month: {entry['month']}\n{'=' * 50}")
             loader.load_all_pages(entry['url'])
-            entry["links_inside"] = loader.get_all_links()
+            entry["links_inside"] = loader.get_all_links(keyword=keyword)
             num_links = len(entry["links_inside"])
             total_links += num_links
 
@@ -232,11 +267,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Process monthly links from Fedresurs')
     parser.add_argument('--force-recreate', action='store_true',
                         help='Recreate output file even if it exists')
+    parser.add_argument('--keyword', type=str, default='прекращение',
+                        help='Keyword to filter blocks (case-insensitive). Empty string processes all links')
     args = parser.parse_args()
 
     process_links_file(
         INPUT_PATH,
         OUTPUT_PATH,
         force_recreate=args.force_recreate,
-        headless=False  # НЕ ТРОГАТЬ! по-другому не работает
+        headless=False,  # НЕ ТРОГАТЬ! по-другому не работает
+        keyword=args.keyword
     )
