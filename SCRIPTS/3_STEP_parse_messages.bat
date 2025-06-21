@@ -2,6 +2,9 @@
 chcp 65001 > nul
 setlocal enabledelayedexpansion
 
+:: Get the directory where this batch file is located
+set "batch_dir=%~dp0"
+
 :: Main header
 echo ______________________________________________________________________________
 echo          ВНИМАНИЕ: ЭТАП СБОРА СЫРЫХ ДАННЫХ ИЗ ФЕДРЕСУРСА
@@ -13,7 +16,7 @@ echo.
 
 :: Activate Python environment
 echo Активируем виртуальное окружение...
-call ../venv/Scripts/activate
+call "%batch_dir%..\venv\Scripts\activate"
 
 :: Browser mode selection
 :select_browser
@@ -56,11 +59,11 @@ if "%folder_option%"=="1" (
 :run_script
 echo.
 echo Запускаем сбор данных...
-echo Команда: python ../3prepare_raw_contents.py %options%
+echo Команда: python "%batch_dir%..\3prepare_raw_contents.py" %options%
 echo.
 pause
 
-python ../3prepare_raw_contents.py %options%
+python "%batch_dir%..\3prepare_raw_contents.py" %options%
 
 :: Show results
 if %errorlevel% equ 0 (

@@ -2,9 +2,12 @@
 chcp 65001 > nul
 setlocal enabledelayedexpansion
 
+:: Get the directory where this batch file is located
+set "batch_dir=%~dp0"
+
 :: 1. Activate environment
 echo Активация виртуального окружения...
-call ../venv/Scripts/activate
+call "%batch_dir%..\venv\Scripts\activate"
 
 :: 2. Get company name
 echo.
@@ -48,7 +51,7 @@ if defined start_param echo Начало: !start_month!
 if defined end_param echo Конец: !end_month!
 
 :: Build command dynamically
-set py_command=python ../1prepare_month_links.py "!company_name!"
+set py_command=python "%batch_dir%..\1prepare_month_links.py" "!company_name!"
 if defined start_param set py_command=!py_command! !start_param!
 if defined end_param set py_command=!py_command! !end_param!
 
@@ -59,7 +62,7 @@ echo Выполняется: !py_command!
 if !errorlevel! equ 0 (
     echo.
     echo Успешно завершено!
-    echo Был создан файл 1month_links.json
+    echo Был создан файл "%batch_dir%..\1month_links.json"
     pause
 ) else (
     echo.

@@ -2,6 +2,9 @@
 chcp 65001 > nul
 setlocal enabledelayedexpansion
 
+:: Get the directory where this batch file is located
+set "batch_dir=%~dp0"
+
 echo ______________________________________________________________________________
 echo          СОЗДАНИЕ ИТОГОВОГО EXCEL-ФАЙЛА
 echo ______________________________________________________________________________
@@ -12,24 +15,25 @@ echo.
 
 :: Активируем Python-окружение
 echo Активируем виртуальное окружение...
-call ../venv/Scripts/activate
+call "%batch_dir%..\venv\Scripts\activate"
 
 :: Запускаем скрипт генерации Excel
-python ../4make_excel_files.py
+python "%batch_dir%..\4make_excel_files.py"
 
 :: Проверяем результат
-if exist "../output.xlsx" (
+if exist "%batch_dir%..\output.xlsx" (
+    for /f %%F in ('dir /a-d /os "%batch_dir%..\output.xlsx" ^| find "output.xlsx"') do set "filesize=%%~zF"
     echo.
     echo ______________________________________________________________________________
     echo ✔ Файл output.xlsx успешно создан!
-    echo Размер: %%~z output.xlsx байт
+    echo Размер: !filesize! байт
     echo ______________________________________________________________________________
 
     :: Предлагаем открыть файл
     echo.
     set /p open_file="Открыть файл output.xlsx сейчас? (Y - да / N - нет): "
     if /i "!open_file!" == "Y" (
-        start "" "output.xlsx"
+        start "" "%batch_dir%..\output.xlsx"
         echo Файл открыт в программе по умолчанию!
     )
 ) else (

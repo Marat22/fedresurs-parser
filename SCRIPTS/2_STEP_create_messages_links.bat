@@ -2,12 +2,15 @@
 chcp 65001 > nul
 setlocal enabledelayedexpansion
 
+:: Get the directory where this batch file is located
+set "batch_dir=%~dp0"
+
 echo Сейчас будут сохранены ссылки сообщений, которые надо запарсить
 echo.
 
 :: Активация виртуального окружения
 echo Активация виртуального окружения...
-call ../venv/Scripts/activate
+call "%batch_dir%..\venv\Scripts\activate"
 
 :: Запрос о необходимости пересоздания файла
 echo.
@@ -51,7 +54,7 @@ if not "!keyword!" == "" (
 :: Запуск основного скрипта
 echo.
 echo Запуск скрипта подготовки ссылок сообщений...
-python ../2prepare_message_links.py !force_param! !keyword_param!
+python "%batch_dir%..\2prepare_message_links.py" !force_param! !keyword_param!
 
 :: Проверка результата выполнения
 if !errorlevel! equ 0 (
